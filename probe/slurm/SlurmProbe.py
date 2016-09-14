@@ -294,12 +294,6 @@ class SlurmAcct(object):
         #       are inserted, each with distinct start and end times.
         #       We consider the walltime to be the total time running,
         #       adding up all the records.
-        #
-        #       A job may have many job_table rows, which have many step_table
-        #       rows.
-        #       This is why we sum twice when calculating the CPU usages. Once
-        #       to total the CPU usage of steps for a job_table row, then
-        #       again to roll up each job_table row subtotal into a job total.
 
         sql = '''SELECT j.id_job
             , j.exit_code
@@ -312,22 +306,25 @@ class SlurmAcct(object):
             , MIN(j.time_start) AS time_start
             , MAX(j.time_end) AS time_end
             , SUM(j.time_suspended) AS time_suspended
-            , SUM(j.time_end - j.time_start - j.time_suspended) AS wall_time
+            , SUM(CASE WHEN j.time_end < j.time_start + j.time_suspended
+                       THEN 0
+                       ELSE j.time_end - j.time_start - j.time_suspended
+                  END) AS wall_time
             , a.acct
             , a.user
-            , MAX(( SELECT MAX(s.max_rss)
+            , ( SELECT MAX(s.max_rss)
                 FROM %(cluster)s_step_table s
                 WHERE s.job_db_inx = j.job_db_inx
                 /* Note: Will underreport mem for jobs with simultaneous steps */
-              )) AS max_rss
-            , SUM(( SELECT SUM(s.user_sec) + SUM(s.user_usec/1000000)
+              ) AS max_rss
+            , ( SELECT SUM(s.user_sec) + SUM(s.user_usec/1000000)
                 FROM %(cluster)s_step_table s
                 WHERE s.job_db_inx = j.job_db_inx
-              )) AS cpu_user
-            , SUM(( SELECT SUM(s.sys_sec) + SUM(s.sys_usec/1000000)
+              ) AS cpu_user
+            , ( SELECT SUM(s.sys_sec) + SUM(s.sys_usec/1000000)
                 FROM %(cluster)s_step_table s
                 WHERE s.job_db_inx = j.job_db_inx
-              )) AS cpu_sys
+              ) AS cpu_sys
             FROM %(cluster)s_job_table as j
             LEFT JOIN %(cluster)s_assoc_table AS a ON j.id_assoc = a.id_assoc
             WHERE %(where)s
