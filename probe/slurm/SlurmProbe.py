@@ -87,7 +87,7 @@ class SlurmProbe:
         self.cluster = Gratia.Config.getConfigAttribute('SlurmCluster')
 
         # SLURM made changes to the accounting database schema
-        if LooseVersion(self.get_slurm_version) < LooseVersion("15.08.0"):
+        if LooseVersion(self.get_slurm_version()) < LooseVersion("15.08.0"):
             # Original schema
             self.sacct = SlurmAcct_v1(self.conn, self.cluster)
         else:
